@@ -2,14 +2,12 @@ import { processRichtextResponsiveImages } from '$utils/richtext-responsive-imag
 window.Webflow ||= [];
 window.Webflow.push(() => {
   processRichtextResponsiveImages();
-  // Animation de la navbar au scroll (uniquement si .nav_background est présent)
-  // Désactivé sur les pages avec des sections hero-full_wrap (géré par l'embed nav)
   const heroSections = document.querySelectorAll('.hero-full_wrap');
   if (heroSections.length === 0) {
     const navComponent = document.querySelector('.nav_component');
     const navBackground = navComponent ? navComponent.querySelector('.nav_background') : null;
     if (navBackground) {
-      const threshold = window.innerHeight * 0.05; // 5vh
+      const threshold = window.innerHeight * 0.05;
       let isActive = false;
       const navParent = navComponent.parentElement;
       const isDark = navParent.classList.contains('u-theme-dark');
@@ -40,7 +38,6 @@ window.Webflow.push(() => {
   document.querySelectorAll('.w-richtext').forEach((el) => {
     el.innerHTML = el.innerHTML.replace(/ ([;:!?»])/g, '\u00A0$1').replace(/([«]) /g, '$1\u00A0');
   });
-  // Skip du loader sur la homepage (utilisable indépendamment de data-back-to-home)
   document.querySelectorAll('[data-skip-home-loader]').forEach((link) => {
     link.addEventListener('click', () => {
       sessionStorage.setItem('skipHomeLoader', 'true');
