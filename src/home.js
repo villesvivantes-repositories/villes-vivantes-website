@@ -119,7 +119,14 @@ window.Webflow.push(() => {
   });
 
   // Déclencher l'outro automatiquement à la fin de la vidéo
-  const loaderVideo = loaderContent.querySelector('video');
+  // AVANT (bug) : querySelector('video') prend toujours la 1ère <video> du DOM,
+  // qui est la vidéo desktop — display:none sur mobile via [data-hide-below="desktop"].
+  // APRÈS (fix) : on prend la <video> réellement visible pour le viewport courant,
+  // via offsetParent (null si un ancêtre est display:none) — même logique que le CSS,
+  // sans dupliquer le seuil 992px en dur.
+  const loaderVideo =
+    Array.from(loaderContent.querySelectorAll('video')).find((v) => v.offsetParent !== null) ||
+    loaderContent.querySelector('video');
   if (loaderVideo) {
     loaderVideo.addEventListener('ended', () => {
       playOutroAnimation();
