@@ -107,7 +107,10 @@ window.Webflow.push(() => {
   // }
 
   // Bloquer le scroll pendant le loader
-  document.body.style.overflow = 'hidden';
+  // AVANT (bug) : overflow:hidden seul ne bloque pas fiablement le scroll tactile mobile,
+  // ce qui laissait la page défiler derrière un loader pourtant en position:fixed.
+  // APRÈS (fix) : réutilise le verrou déjà utilisé ailleurs sur ce site (modales vidéo/contact).
+  window.__vvLock.lock();
 
   // Bouton de bypass du loader (attribut data-loader-skip)
   document.querySelectorAll('[data-loader-skip]').forEach((btn) => {
@@ -163,7 +166,7 @@ window.Webflow.push(() => {
         onComplete: () => {
           document.querySelector('.loader_wrap').style.display = 'none';
           // Débloquer le scroll et marquer l'animation comme jouée pour toute la session
-          document.body.style.overflow = '';
+          window.__vvLock.unlock();
           // sessionStorage.setItem('introPlayed', 'true');
         },
       });
