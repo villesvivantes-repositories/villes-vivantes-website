@@ -122,14 +122,18 @@ window.Webflow.push(() => {
   });
 
   // Déclencher l'outro automatiquement à la fin de la vidéo
-  // AVANT (bug) : querySelector('video') prend toujours la 1ère <video> du DOM,
-  // qui est la vidéo desktop — display:none sur mobile via [data-hide-below="desktop"].
-  // APRÈS (fix) : on prend la <video> réellement visible pour le viewport courant,
-  // via offsetParent (null si un ancêtre est display:none) — même logique que le CSS,
-  // sans dupliquer le seuil 992px en dur.
+  // AVANT (bug 1) : querySelector('video') prend toujours la 1ère <video> du DOM (desktop).
+  // AVANT (bug 2, régression) : le remplacement par offsetParent dépendait de la visibilité
+  // de tous les ancêtres au moment exact du test — sur certains rechargements, .loader_wrap
+  // n'est pas encore visible à cet instant précis, donc les deux vidéos retournent
+  // offsetParent===null et le code retombait sur la vidéo desktop (même bug, revenu autrement).
+  // APRÈS (fix) : on lit directement le même seuil que la media query CSS (min-width:992px),
+  // indépendant du moment où le code s'exécute.
+  const isDesktopViewport = window.matchMedia('(min-width: 992px)').matches;
   const loaderVideo =
-    Array.from(loaderContent.querySelectorAll('video')).find((v) => v.offsetParent !== null) ||
-    loaderContent.querySelector('video');
+    (isDesktopViewport
+      ? loaderContent.querySelector('.v-desk')
+      : loaderContent.querySelector('.v-mob')) || loaderContent.querySelector('video');
   if (loaderVideo) {
     loaderVideo.addEventListener('ended', () => {
       playOutroAnimation();
