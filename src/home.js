@@ -113,8 +113,16 @@ window.Webflow.push(() => {
   window.__vvLock.lock();
 
   // Bouton de bypass du loader (attribut data-loader-skip)
+  // AVANT (bug) : "NOS SERVICES" est un vrai <a href="/"> (page actuelle, aria-current="page").
+  // Sans stopPropagation, le clic remonte jusqu'à l'écouteur global du script de transition
+  // de page (sur document), qui intercepte tout <a> même domaine / sans "#" / sans _blank,
+  // et déclenche après 0.25s une vraie navigation vers "/" — soit un rechargement complet
+  // de la page puisqu'on y est déjà, relançant tout depuis zéro (loader inclus).
+  // APRÈS (fix) : on stoppe la propagation pour que ce clic ne soit vu que par ce handler.
   document.querySelectorAll('[data-loader-skip]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (loaderVideo) loaderVideo.pause();
       introFlashComplete = true;
       playOutroAnimation();
