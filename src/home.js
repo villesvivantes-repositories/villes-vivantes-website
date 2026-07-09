@@ -148,12 +148,26 @@ window.Webflow.push(() => {
     });
   }
 
-  // Démarrer l'animation d'intro flash une fois la transition de page terminée
-  // En mode forceLoader, pas de transition de page réelle donc on lance directement
-  if (forceLoader || window.pageTransitionComplete) {
+  // Démarrer l'animation d'intro flash dès que la vidéo affiche réellement sa première image
+  // AVANT (bug) : le flash disparaissait après un délai fixe (0.5s après la fin de la
+  // transition de page), sans rapport avec le moment où la vidéo démarre vraiment
+  // (autoplay) — la vidéo jouait déjà depuis un moment, on en manquait le tout début.
+  // APRÈS (fix) : on déclenche le fondu sur l'évènement "playing" de la vidéo (le moment
+  // où elle affiche réellement sa première image), avec un filet de sécurité (délai fixe)
+  // si la vidéo ne démarre jamais (autoplay bloqué, erreur réseau).
+  let introFlashTriggered = false;
+  function triggerIntroFlashOnce() {
+    if (introFlashTriggered) return;
+    introFlashTriggered = true;
     playIntroFlashAnimation();
+  }
+  if (loaderVideo) {
+    loaderVideo.addEventListener('playing', triggerIntroFlashOnce, { once: true });
+    setTimeout(triggerIntroFlashOnce, 4000);
+  } else if (forceLoader || window.pageTransitionComplete) {
+    triggerIntroFlashOnce();
   } else {
-    document.addEventListener('pageTransitionComplete', playIntroFlashAnimation, { once: true });
+    document.addEventListener('pageTransitionComplete', triggerIntroFlashOnce, { once: true });
   }
 
   // Animation d'intro flash
@@ -161,7 +175,6 @@ window.Webflow.push(() => {
     gsap.to('.loader_flash_wrap', {
       opacity: 0,
       duration: 0.8,
-      delay: 0.5,
       onComplete: () => {
         document.querySelector('.loader_flash_wrap').style.display = 'none';
         introFlashComplete = true;
