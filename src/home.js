@@ -100,25 +100,11 @@ window.Webflow.push(() => {
   // (ajout de ?loader dans l'URL pour forcer le rejeu en dev)
   const forceLoader = new URLSearchParams(window.location.search).has('loader');
   if (forceLoader) sessionStorage.removeItem('introPlayed');
-  // if (!forceLoader && sessionStorage.getItem('introPlayed')) {
-  //   document.querySelector('.loader_wrap').style.display = 'none';
-  //   introFlashComplete = true;
-  //   return;
-  // }
 
   // Bloquer le scroll pendant le loader
-  // AVANT (bug) : overflow:hidden seul ne bloque pas fiablement le scroll tactile mobile,
-  // ce qui laissait la page défiler derrière un loader pourtant en position:fixed.
-  // APRÈS (fix) : réutilise le verrou déjà utilisé ailleurs sur ce site (modales vidéo/contact).
   window.__vvLock.lock();
 
   // Bouton de bypass du loader (attribut data-loader-skip)
-  // AVANT (bug) : "NOS SERVICES" est un vrai <a href="/"> (page actuelle, aria-current="page").
-  // Sans stopPropagation, le clic remonte jusqu'à l'écouteur global du script de transition
-  // de page (sur document), qui intercepte tout <a> même domaine / sans "#" / sans _blank,
-  // et déclenche après 0.25s une vraie navigation vers "/" — soit un rechargement complet
-  // de la page puisqu'on y est déjà, relançant tout depuis zéro (loader inclus).
-  // APRÈS (fix) : on stoppe la propagation pour que ce clic ne soit vu que par ce handler.
   document.querySelectorAll('[data-loader-skip]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -130,13 +116,6 @@ window.Webflow.push(() => {
   });
 
   // Déclencher l'outro automatiquement à la fin de la vidéo
-  // AVANT (bug 1) : querySelector('video') prend toujours la 1ère <video> du DOM (desktop).
-  // AVANT (bug 2, régression) : le remplacement par offsetParent dépendait de la visibilité
-  // de tous les ancêtres au moment exact du test — sur certains rechargements, .loader_wrap
-  // n'est pas encore visible à cet instant précis, donc les deux vidéos retournent
-  // offsetParent===null et le code retombait sur la vidéo desktop (même bug, revenu autrement).
-  // APRÈS (fix) : on lit directement le même seuil que la media query CSS (min-width:992px),
-  // indépendant du moment où le code s'exécute.
   const isDesktopViewport = window.matchMedia('(min-width: 992px)').matches;
   const loaderVideo =
     (isDesktopViewport
@@ -148,26 +127,71 @@ window.Webflow.push(() => {
     });
   }
 
-  // Démarrer l'animation d'intro flash dès que la vidéo affiche réellement sa première image
-  // AVANT (bug) : le flash disparaissait après un délai fixe (0.5s après la fin de la
-  // transition de page), sans rapport avec le moment où la vidéo démarre vraiment
-  // (autoplay) — la vidéo jouait déjà depuis un moment, on en manquait le tout début.
-  // APRÈS (fix) : on déclenche le fondu sur l'évènement "playing" de la vidéo (le moment
-  // où elle affiche réellement sa première image), avec un filet de sécurité (délai fixe)
-  // si la vidéo ne démarre jamais (autoplay bloqué, erreur réseau).
+  // Démarrage de la vidéo d'intro, subordonné au consentement cookies (Cookiebot)
+  // AVANT (bug) : la vidéo démarrait nativement (attribut autoplay) dès le chargement
+  // du HTML — bien avant que ce script (chargé en defer, après jQuery/Webflow/GSAP/
+  // ScrollTrigger/Finsweet) n'ait la moindre chance de s'exécuter. L'évènement "playing"
+  // censé déclencher la disparition du flash s'était donc déjà produit, et n'était
+  // plus jamais capté : seul le filet de sécurité (setTimeout 4s) se déclenchait, à
+  // chaque chargement, pendant que la vidéo jouait déjà invisible depuis plusieurs
+  // secondes derrière le flash — le visiteur ne voyait donc jamais le tout début de
+  // la vidéo une fois le flash disparu. Par ailleurs, rien n'empêchait la vidéo de
+  // jouer pendant que la bannière Cookiebot était encore affichée par-dessus.
+  // APRÈS (fix) : on neutralise l'autoplay natif dès l'exécution du script (pause
+  // immédiate, quel que soit son état), puis on ne (re)démarre la vidéo depuis sa
+  // toute première image qu'une fois le consentement cookies résolu (CookiebotOnConsentReady
+  // — se déclenche aussi bien pour un premier choix que pour un visiteur revenant dont
+  // le consentement est déjà connu). Comme c'est nous-mêmes qui déclenchons ensuite
+  // play(), l'évènement "playing" qui en résulte est nécessairement capté : il ne
+  // peut plus s'être produit avant que notre écouteur ne soit attaché. Le flash ne
+  // reste donc plus affiché que le temps réel de démarrage, et le visiteur voit
+  // systématiquement l'intégralité de la séquence, de la première à la dernière image.
   let introFlashTriggered = false;
   function triggerIntroFlashOnce() {
     if (introFlashTriggered) return;
     introFlashTriggered = true;
     playIntroFlashAnimation();
   }
-  if (loaderVideo) {
-    loaderVideo.addEventListener('playing', triggerIntroFlashOnce, { once: true });
-    setTimeout(triggerIntroFlashOnce, 4000);
-  } else if (forceLoader || window.pageTransitionComplete) {
-    triggerIntroFlashOnce();
+
+  let introSequenceStarted = false;
+  function startIntroSequence() {
+    if (introSequenceStarted) return;
+    introSequenceStarted = true;
+
+    if (loaderVideo) {
+      try {
+        loaderVideo.currentTime = 0;
+      } catch (err) {
+        // Certains navigateurs refusent de modifier currentTime avant que
+        // suffisamment de données ne soient chargées ; sans conséquence,
+        // la vidéo repart de toute façon depuis son tout début par défaut.
+      }
+      loaderVideo.addEventListener('playing', triggerIntroFlashOnce, { once: true });
+      loaderVideo.play().catch(() => {
+        // Lecture refusée par le navigateur (cas rare pour une vidéo muted) :
+        // le filet de sécurité ci-dessous prendra le relais.
+      });
+      setTimeout(triggerIntroFlashOnce, 4000);
+    } else if (forceLoader || window.pageTransitionComplete) {
+      triggerIntroFlashOnce();
+    } else {
+      document.addEventListener('pageTransitionComplete', triggerIntroFlashOnce, { once: true });
+    }
+  }
+
+  // Neutralise immédiatement l'autoplay natif, avant même de savoir si Cookiebot
+  // est présent ou combien de temps il mettra à répondre.
+  if (loaderVideo) loaderVideo.pause();
+
+  if ('Cookiebot' in window) {
+    window.addEventListener('CookiebotOnConsentReady', startIntroSequence, { once: true });
+    // Filet de sécurité : si Cookiebot est anormalement lent à répondre (réseau) ou
+    // si son script est bloqué (ad-blocker), on ne bloque pas indéfiniment l'intro.
+    setTimeout(startIntroSequence, 5000);
   } else {
-    document.addEventListener('pageTransitionComplete', triggerIntroFlashOnce, { once: true });
+    // Cookiebot non présent sur cette page/cet environnement (ex. site de dev) :
+    // on démarre normalement, sans attendre un évènement qui ne viendra jamais.
+    startIntroSequence();
   }
 
   // Animation d'intro flash
@@ -190,9 +214,7 @@ window.Webflow.push(() => {
         duration: 0.5,
         onComplete: () => {
           document.querySelector('.loader_wrap').style.display = 'none';
-          // Débloquer le scroll et marquer l'animation comme jouée pour toute la session
           window.__vvLock.unlock();
-          // sessionStorage.setItem('introPlayed', 'true');
         },
       });
     }
