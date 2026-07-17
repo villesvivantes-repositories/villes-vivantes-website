@@ -115,6 +115,27 @@ window.Webflow.push(() => {
     });
   });
 
+  // Skip de l'intro par simple geste : molette (desktop), glissement tactile
+  // (mobile), ou clic n'importe où dans le loader hors des vrais boutons/liens
+  // ("NOS SERVICES", "LE PROJET"), qui gardent leur propre comportement.
+  // Contrairement à data-skip-home-loader (rechargement de page), ce geste
+  // fait disparaître le loader en place, sans recharger — plus immédiat.
+  const loaderWrapEl = document.querySelector('.loader_wrap');
+  if (loaderWrapEl) {
+    let gestureSkipped = false;
+    const skipViaGesture = (e) => {
+      if (gestureSkipped) return;
+      if (e.target.closest('a, button')) return; // laisse les vrais liens/boutons agir normalement
+      gestureSkipped = true;
+      if (loaderVideo) loaderVideo.pause();
+      introFlashComplete = true;
+      playOutroAnimation();
+    };
+    loaderWrapEl.addEventListener('wheel', skipViaGesture, { passive: true });
+    loaderWrapEl.addEventListener('touchmove', skipViaGesture, { passive: true });
+    loaderWrapEl.addEventListener('click', skipViaGesture);
+  }
+
   // Déclencher l'outro automatiquement à la fin de la vidéo
   const isDesktopViewport = window.matchMedia('(min-width: 992px)').matches;
   const loaderVideo =
@@ -128,24 +149,6 @@ window.Webflow.push(() => {
   }
 
   // Démarrage de la vidéo d'intro, subordonné au consentement cookies (Cookiebot)
-  // AVANT (bug) : la vidéo démarrait nativement (attribut autoplay) dès le chargement
-  // du HTML — bien avant que ce script (chargé en defer, après jQuery/Webflow/GSAP/
-  // ScrollTrigger/Finsweet) n'ait la moindre chance de s'exécuter. L'évènement "playing"
-  // censé déclencher la disparition du flash s'était donc déjà produit, et n'était
-  // plus jamais capté : seul le filet de sécurité (setTimeout 4s) se déclenchait, à
-  // chaque chargement, pendant que la vidéo jouait déjà invisible depuis plusieurs
-  // secondes derrière le flash — le visiteur ne voyait donc jamais le tout début de
-  // la vidéo une fois le flash disparu. Par ailleurs, rien n'empêchait la vidéo de
-  // jouer pendant que la bannière Cookiebot était encore affichée par-dessus.
-  // APRÈS (fix) : on neutralise l'autoplay natif dès l'exécution du script (pause
-  // immédiate, quel que soit son état), puis on ne (re)démarre la vidéo depuis sa
-  // toute première image qu'une fois le consentement cookies résolu (CookiebotOnConsentReady
-  // — se déclenche aussi bien pour un premier choix que pour un visiteur revenant dont
-  // le consentement est déjà connu). Comme c'est nous-mêmes qui déclenchons ensuite
-  // play(), l'évènement "playing" qui en résulte est nécessairement capté : il ne
-  // peut plus s'être produit avant que notre écouteur ne soit attaché. Le flash ne
-  // reste donc plus affiché que le temps réel de démarrage, et le visiteur voit
-  // systématiquement l'intégralité de la séquence, de la première à la dernière image.
   let introFlashTriggered = false;
   function triggerIntroFlashOnce() {
     if (introFlashTriggered) return;
@@ -185,12 +188,8 @@ window.Webflow.push(() => {
 
   if ('Cookiebot' in window) {
     window.addEventListener('CookiebotOnConsentReady', startIntroSequence, { once: true });
-    // Filet de sécurité : si Cookiebot est anormalement lent à répondre (réseau) ou
-    // si son script est bloqué (ad-blocker), on ne bloque pas indéfiniment l'intro.
     setTimeout(startIntroSequence, 5000);
   } else {
-    // Cookiebot non présent sur cette page/cet environnement (ex. site de dev) :
-    // on démarre normalement, sans attendre un évènement qui ne viendra jamais.
     startIntroSequence();
   }
 
